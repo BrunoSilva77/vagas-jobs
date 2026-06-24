@@ -62,6 +62,18 @@ async function fetchGoogleJobs(query) {
       searchTerms += ' Remoto';
     }
 
+    if (query.source && query.source !== 'Todos') {
+      const sourceMap = {
+        'LinkedIn': 'site:linkedin.com',
+        'InfoJobs': 'site:infojobs.com.br',
+        'Gupy': 'site:gupy.io',
+        'Vagas.com': 'site:vagas.com.br'
+      };
+      if (sourceMap[query.source]) {
+        searchTerms += ` ${sourceMap[query.source]}`;
+      }
+    }
+
     if (!searchTerms) return { jobs: [], next_page_token: null };
 
     // Build SerpApi URL
@@ -110,11 +122,16 @@ async function fetchGoogleJobs(query) {
 }
 
 app.get('/api/jobs', async (req, res) => {
-  const { area, location, type, level, page_token } = req.query;
+  const { area, location, type, level, source, page_token } = req.query;
+
+  // Se o usuário selecionou uma fonte específica (ex: LinkedIn), pulamos a Remotive.
+  const fetchRemotive = (!source || source === 'Todos') 
+    ? fetchRemotiveJobs(req.query) 
+    : Promise.resolve([]);
 
   // Busca simultânea
   const [remotiveResults, googleResults] = await Promise.allSettled([
-    fetchRemotiveJobs(req.query),
+    fetchRemotive,
     fetchGoogleJobs(req.query)
   ]);
 
