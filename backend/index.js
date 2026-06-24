@@ -55,8 +55,7 @@ async function fetchGoogleJobs(query) {
 
   try {
     // Construct search terms. We intentionally leave out the type from searchTerms if we are going to use chips.
-    // However, since chips format can be tricky across regions, appending it to the query is also highly effective.
-    let searchTerms = [query.area, query.location, query.level].filter(Boolean).join(' ');
+    let searchTerms = [query.area, query.location || 'Brasil', query.level].filter(Boolean).join(' ');
     
     if (query.type === 'Home Office') {
       searchTerms += ' Remoto';
