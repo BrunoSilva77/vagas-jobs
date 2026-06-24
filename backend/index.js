@@ -18,6 +18,8 @@ const normalizeText = (text) => {
 
 // Fetch from Remotive (Open API)
 async function fetchRemotiveJobs(query) {
+  if (query.page_token) return []; // Remotive doesn't support our Google page token, so skip on load more
+
   try {
     const searchTerms = [query.area, query.level].filter(Boolean).join(' ');
     const url = `https://remotive.com/api/remote-jobs${searchTerms ? `?search=${encodeURIComponent(searchTerms)}` : ''}`;
@@ -25,7 +27,7 @@ async function fetchRemotiveJobs(query) {
     const response = await axios.get(url, { timeout: 8000 });
     const jobs = response.data.jobs || [];
     
-    return jobs.slice(0, 30).map(job => ({
+    return jobs.slice(0, 15).map(job => ({
       id: `remotive-${job.id}`,
       title: job.title,
       company: job.company_name,
@@ -34,7 +36,7 @@ async function fetchRemotiveJobs(query) {
       area: job.category,
       level: '', 
       date: job.publication_date,
-      description: job.description.replace(/<[^>]*>?/gm, '').substring(0, 200) + '...', // Basic HTML strip
+      description: job.description.replace(/<[^>]*>?/gm, '').substring(0, 200) + '...', 
       url: job.url
     }));
   } catch (error) {
@@ -48,22 +50,39 @@ async function fetchGoogleJobs(query) {
   const apiKey = process.env.SERPAPI_KEY;
   if (!apiKey) {
     console.log("SERPAPI_KEY não configurada. Pulando busca no Google Jobs.");
-    return [];
+    return { jobs: [], next_page_token: null };
   }
 
   try {
-    const searchTerms = [query.area, query.location, query.level].filter(Boolean).join(' ');
-    if (!searchTerms) return []; 
+    // Construct search terms. We intentionally leave out the type from searchTerms if we are going to use chips.
+    // However, since chips format can be tricky across regions, appending it to the query is also highly effective.
+    let searchTerms = [query.area, query.location, query.level].filter(Boolean).join(' ');
+    
+    if (query.type === 'Home Office') {
+      searchTerms += ' Remoto';
+    }
 
-    const url = `https://serpapi.com/search.json?engine=google_jobs&q=${encodeURIComponent(searchTerms)}&hl=pt&gl=br&api_key=${apiKey}`;
-    const response = await axios.get(url, { timeout: 8000 });
+    if (!searchTerms) return { jobs: [], next_page_token: null };
+
+    // Build SerpApi URL
+    let url = `https://serpapi.com/search.json?engine=google_jobs&q=${encodeURIComponent(searchTerms)}&hl=pt&gl=br&api_key=${apiKey}`;
+    
+    // Add pagination token if it exists
+    if (query.page_token) {
+      url += `&next_page_token=${encodeURIComponent(query.page_token)}`;
+    }
+
+    // Optional: Add chips if we had specific Google chips, e.g., &chips=date_posted:today
+
+    const response = await axios.get(url, { timeout: 15000 });
     
     const jobs = response.data.jobs_results || [];
+    const next_page_token = response.data.serpapi_pagination?.next_page_token || null;
     
-    return jobs.map(job => {
+    const mappedJobs = jobs.map(job => {
       let type = 'Presencial';
       const locNorm = normalizeText(job.location);
-      if (locNorm.includes('remoto') || normalizeText(job.title).includes('remoto')) {
+      if (locNorm.includes('remoto') || normalizeText(job.title).includes('remoto') || query.type === 'Home Office') {
         type = 'Home Office';
       } else if (locNorm.includes('hibrido')) {
         type = 'Híbrido';
@@ -77,19 +96,21 @@ async function fetchGoogleJobs(query) {
         type: type,
         area: query.area || 'Diversos',
         level: '',
-        date: new Date().toISOString(), // Fallback
+        date: new Date().toISOString(), 
         description: (job.description || '').substring(0, 200) + '...',
         url: job.related_links ? job.related_links[0]?.link : job.share_link || '#'
       };
     });
+
+    return { jobs: mappedJobs, next_page_token };
   } catch (error) {
     console.error("Erro ao buscar no Google Jobs via SerpApi:", error.message);
-    return [];
+    return { jobs: [], next_page_token: null };
   }
 }
 
 app.get('/api/jobs', async (req, res) => {
-  const { area, location, type, level } = req.query;
+  const { area, location, type, level, page_token } = req.query;
 
   // Busca simultânea
   const [remotiveResults, googleResults] = await Promise.allSettled([
@@ -98,18 +119,15 @@ app.get('/api/jobs', async (req, res) => {
   ]);
 
   let allJobs = [];
+  let nextToken = null;
 
   if (remotiveResults.status === 'fulfilled') {
     allJobs = [...allJobs, ...remotiveResults.value];
   }
   
   if (googleResults.status === 'fulfilled') {
-    allJobs = [...allJobs, ...googleResults.value];
-  }
-
-  if (allJobs.length === 0) {
-    console.log("Nenhuma vaga encontrada nas APIs. Usando mockData de fallback.");
-    allJobs = [...mockJobs];
+    allJobs = [...allJobs, ...googleResults.value.jobs];
+    nextToken = googleResults.value.next_page_token;
   }
 
   // Pós-processamento de Filtros
@@ -150,7 +168,23 @@ app.get('/api/jobs', async (req, res) => {
 
   filteredJobs.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  res.json(filteredJobs);
+  // Fallback se após os filtros não sobrar nada na PRIMEIRA página, tenta usar o mock para não deixar a tela vazia
+  if (filteredJobs.length === 0 && !page_token) {
+     console.log("Nenhuma vaga real bateu com os filtros. Usando mockData...");
+     let mockFiltered = [...mockJobs];
+     if (area) mockFiltered = mockFiltered.filter(job => normalizeText(job.title).includes(normalizeText(area)) || normalizeText(job.area).includes(normalizeText(area)));
+     if (location) mockFiltered = mockFiltered.filter(job => normalizeText(job.location).includes(normalizeText(location)));
+     if (type && type !== 'Todos') mockFiltered = mockFiltered.filter(job => normalizeText(job.type).includes(normalizeText(type)));
+     if (level && level !== 'Todos') mockFiltered = mockFiltered.filter(job => normalizeText(job.level).includes(normalizeText(level)) || normalizeText(job.title).includes(normalizeText(level)));
+     
+     filteredJobs = mockFiltered.sort((a, b) => new Date(b.date) - new Date(a.date));
+  }
+
+  // Novo formato de resposta que inclui paginação
+  res.json({
+    jobs: filteredJobs,
+    next_page_token: nextToken
+  });
 });
 
 app.listen(PORT, () => {

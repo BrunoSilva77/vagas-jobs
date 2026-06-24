@@ -3,7 +3,9 @@ import './App.css';
 
 function App() {
   const [jobs, setJobs] = useState([]);
+  const [nextPageToken, setNextPageToken] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searched, setSearched] = useState(false);
   
   // Form state
@@ -26,11 +28,36 @@ function App() {
       
       const response = await fetch(`http://localhost:3001/api/jobs?${params.toString()}`);
       const data = await response.json();
-      setJobs(data);
+      setJobs(data.jobs || []);
+      setNextPageToken(data.next_page_token || null);
     } catch (error) {
       console.error("Erro ao buscar vagas:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadMore = async () => {
+    if (!nextPageToken) return;
+    setLoadingMore(true);
+    
+    try {
+      const params = new URLSearchParams();
+      if (area) params.append('area', area);
+      if (location) params.append('location', location);
+      if (type) params.append('type', type);
+      if (level) params.append('level', level);
+      params.append('page_token', nextPageToken);
+      
+      const response = await fetch(`http://localhost:3001/api/jobs?${params.toString()}`);
+      const data = await response.json();
+      
+      setJobs(prev => [...prev, ...(data.jobs || [])]);
+      setNextPageToken(data.next_page_token || null);
+    } catch (error) {
+      console.error("Erro ao carregar mais vagas:", error);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -186,6 +213,19 @@ function App() {
               </article>
             ))}
           </div>
+
+          {!loading && jobs.length > 0 && nextPageToken && (
+            <div className="load-more-container" style={{ textAlign: 'center', marginTop: '3rem' }}>
+              <button 
+                onClick={handleLoadMore} 
+                className="btn-primary" 
+                disabled={loadingMore}
+                style={{ padding: '1rem 3rem', fontSize: '1.1rem' }}
+              >
+                {loadingMore ? 'Carregando...' : 'Carregar Mais Vagas'}
+              </button>
+            </div>
+          )}
         </section>
       </main>
     </div>
