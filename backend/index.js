@@ -52,7 +52,7 @@ async function fetchRemotiveJobs(query) {
     const response = await axios.get(url, { timeout: 8000 });
     const jobs = response.data.jobs || [];
     
-    return jobs.slice(0, 15).map(job => ({
+    return jobs.slice(0, 100).map(job => ({
       id: `remotive-${job.id}`,
       title: job.title,
       company: job.company_name,
@@ -173,38 +173,45 @@ async function fetchLinkedInJobs(query) {
     }
     if (query.type === 'Home Office') keywords += ' Remoto';
 
-    const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(keywords)}&location=${encodeURIComponent(location)}&f_TPR=r604800&start=0`;
+    const baseUrl = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(keywords)}&location=${encodeURIComponent(location)}&f_TPR=r604800`;
     
-    const { data } = await axios.get(url, { timeout: 10000 });
-    const $ = cheerio.load(data);
+    // Busca 3 páginas (0, 25, 50) simultaneamente para trazer até 75 vagas de uma vez
+    const requests = [0, 25, 50].map(start => axios.get(`${baseUrl}&start=${start}`, { timeout: 10000 }).catch(() => null));
+    const responses = await Promise.all(requests);
 
-    $('li').each((i, el) => {
-      const title = $(el).find('h3.base-search-card__title').text().trim();
-      const company = $(el).find('h4.base-search-card__subtitle').text().trim();
-      const jobLocation = $(el).find('span.job-search-card__location').text().trim();
-      const link = $(el).find('a.base-card__full-link').attr('href');
-      const dateText = $(el).find('time').attr('datetime'); // YYYY-MM-DD
+    responses.forEach(response => {
+      if (!response || !response.data) return;
       
-      if (title && link) {
-        let jobType = 'Diversos';
-        if (query.type && query.type !== 'Todos') jobType = query.type;
-        else if (title.toLowerCase().includes('remoto') || title.toLowerCase().includes('remote')) jobType = 'Home Office';
-        else if (title.toLowerCase().includes('híbrido') || title.toLowerCase().includes('hybrid')) jobType = 'Híbrido';
+      const $ = cheerio.load(response.data);
 
-        jobs.push({
-          id: `linkedin-${Math.random().toString(36).substr(2, 9)}`,
-          title,
-          company,
-          location: jobLocation,
-          type: jobType,
-          area: query.area || 'Diversos',
-          level: '',
-          date: dateText ? new Date(dateText).toISOString() : new Date().toISOString(),
-          description: 'Acesse o LinkedIn para ver os detalhes completos desta vaga recém-postada.',
-          url: link,
-          platform: 'LinkedIn'
-        });
-      }
+      $('li').each((i, el) => {
+        const title = $(el).find('h3.base-search-card__title').text().trim();
+        const company = $(el).find('h4.base-search-card__subtitle').text().trim();
+        const jobLocation = $(el).find('span.job-search-card__location').text().trim();
+        const link = $(el).find('a.base-card__full-link').attr('href');
+        const dateText = $(el).find('time').attr('datetime'); // YYYY-MM-DD
+        
+        if (title && link) {
+          let jobType = 'Diversos';
+          if (query.type && query.type !== 'Todos') jobType = query.type;
+          else if (title.toLowerCase().includes('remoto') || title.toLowerCase().includes('remote')) jobType = 'Home Office';
+          else if (title.toLowerCase().includes('híbrido') || title.toLowerCase().includes('hybrid')) jobType = 'Híbrido';
+
+          jobs.push({
+            id: `linkedin-${Math.random().toString(36).substr(2, 9)}`,
+            title,
+            company,
+            location: jobLocation,
+            type: jobType,
+            area: query.area || 'Diversos',
+            level: '',
+            date: dateText ? new Date(dateText).toISOString() : new Date().toISOString(),
+            description: 'Acesse o LinkedIn para ver os detalhes completos desta vaga recém-postada.',
+            url: link,
+            platform: 'LinkedIn'
+          });
+        }
+      });
     });
   } catch (e) {
     console.error("Erro no LinkedIn Scraper:", e.message);
