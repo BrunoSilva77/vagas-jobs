@@ -89,7 +89,9 @@ async function fetchGoogleJobs(query) {
       }
 
       const applyLink = job.apply_options && job.apply_options.length > 0 ? job.apply_options[0].link : null;
-      const finalUrl = applyLink || (job.related_links ? job.related_links[0]?.link : job.share_link) || '#';
+      if (!applyLink) return null; // Ignora vagas que só têm link do Google
+      
+      const finalUrl = applyLink;
       
       let platform = 'Web';
       if (finalUrl !== '#') {
@@ -123,7 +125,7 @@ async function fetchGoogleJobs(query) {
         url: finalUrl,
         platform: platform
       };
-    });
+    }).filter(Boolean); // Remove os nulls
 
     return { jobs: mappedJobs, next_page_token };
   } catch (error) {
