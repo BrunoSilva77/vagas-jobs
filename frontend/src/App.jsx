@@ -204,8 +204,8 @@ function App() {
                 
                 <div className="job-card-footer">
                   <div style={{display: 'flex', gap: '0.5rem'}}>
-                    <span className="job-area">{job.area}</span>
-                    <span className="job-area" style={{background: 'rgba(79, 70, 229, 0.2)', color: '#818cf8'}}>{job.level}</span>
+                    {job.area && <span className="job-area">{job.area}</span>}
+                    {job.level && <span className="job-area" style={{background: 'rgba(79, 70, 229, 0.2)', color: '#818cf8'}}>{job.level}</span>}
                   </div>
                   <a href={job.url} target="_blank" rel="noopener noreferrer" className="btn-apply">
                     Ver Detalhes
