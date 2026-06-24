@@ -231,41 +231,15 @@ app.get('/api/jobs', async (req, res) => {
   let allJobs = [...remotiveJobs, ...googleData.jobs, ...linkedinJobs];
   let nextToken = googleData.next_page_token;
 
-  // Pós-processamento de Filtros
-  const { area, location, type, level } = query;
+  // Pós-processamento de Filtros (Somente para o Tipo, pois as APIs já filtram o resto)
+  const { type } = query;
   let filteredJobs = allJobs;
-
-  if (area) {
-    const areaNorm = normalizeText(area);
-    filteredJobs = filteredJobs.filter(job => 
-      normalizeText(job.title).includes(areaNorm) ||
-      normalizeText(job.area).includes(areaNorm) ||
-      normalizeText(job.description).includes(areaNorm)
-    );
-  }
-
-  if (location) {
-    const locNorm = normalizeText(location);
-    filteredJobs = filteredJobs.filter(job => 
-      normalizeText(job.location).includes(locNorm) || 
-      normalizeText(job.type).includes('home office') 
-    );
-  }
 
   if (type && type !== 'Todos') {
     const typeNorm = normalizeText(type);
     filteredJobs = filteredJobs.filter(job => 
       normalizeText(job.type).includes(typeNorm)
     );
-  }
-
-  if (level && level !== 'Todos') {
-    const levelNorm = normalizeText(level);
-    filteredJobs = filteredJobs.filter(job => {
-      const inLevelField = job.level && normalizeText(job.level).includes(levelNorm);
-      const inTitleField = job.title && normalizeText(job.title).includes(levelNorm);
-      return inLevelField || inTitleField;
-    });
   }
 
   filteredJobs.sort((a, b) => new Date(b.date) - new Date(a.date));
