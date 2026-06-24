@@ -168,6 +168,9 @@ async function fetchLinkedInJobs(query) {
     const area = query.area || 'Desenvolvedor';
     const location = query.location || 'Brasil';
     let keywords = area;
+    if (query.level && query.level !== 'Todos') {
+      keywords += ` ${query.level}`;
+    }
     if (query.type === 'Home Office') keywords += ' Remoto';
 
     const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(keywords)}&location=${encodeURIComponent(location)}&f_TPR=r604800&start=0`;
