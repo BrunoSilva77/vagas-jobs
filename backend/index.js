@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
+import * as cheerio from 'cheerio';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -158,28 +159,77 @@ async function fetchGoogleJobs(query) {
   }
 }
 
+// Fetch LinkedIn (Direct Scraper)
+async function fetchLinkedInJobs(query) {
+  if (query.page_token) return []; // Ignore on pagination for now
+
+  const jobs = [];
+  try {
+    const area = query.area || 'Desenvolvedor';
+    const location = query.location || 'Brasil';
+    let keywords = area;
+    if (query.type === 'Home Office') keywords += ' Remoto';
+
+    const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(keywords)}&location=${encodeURIComponent(location)}&f_TPR=r604800&start=0`;
+    
+    const { data } = await axios.get(url, { timeout: 10000 });
+    const $ = cheerio.load(data);
+
+    $('li').each((i, el) => {
+      const title = $(el).find('h3.base-search-card__title').text().trim();
+      const company = $(el).find('h4.base-search-card__subtitle').text().trim();
+      const jobLocation = $(el).find('span.job-search-card__location').text().trim();
+      const link = $(el).find('a.base-card__full-link').attr('href');
+      const dateText = $(el).find('time').attr('datetime'); // YYYY-MM-DD
+      
+      if (title && link) {
+        let jobType = 'Diversos';
+        if (query.type && query.type !== 'Todos') jobType = query.type;
+        else if (title.toLowerCase().includes('remoto') || title.toLowerCase().includes('remote')) jobType = 'Home Office';
+        else if (title.toLowerCase().includes('híbrido') || title.toLowerCase().includes('hybrid')) jobType = 'Híbrido';
+
+        jobs.push({
+          id: `linkedin-${Math.random().toString(36).substr(2, 9)}`,
+          title,
+          company,
+          location: jobLocation,
+          type: jobType,
+          area: query.area || 'Diversos',
+          level: '',
+          date: dateText ? new Date(dateText).toISOString() : new Date().toISOString(),
+          description: 'Acesse o LinkedIn para ver os detalhes completos desta vaga recém-postada.',
+          url: link,
+          platform: 'LinkedIn'
+        });
+      }
+    });
+  } catch (e) {
+    console.error("Erro no LinkedIn Scraper:", e.message);
+  }
+  return jobs;
+}
+
 app.get('/api/jobs', async (req, res) => {
-  const { area, location, type, level, page_token } = req.query;
+  const query = req.query;
+  let remotiveJobs = [];
+  let googleData = { jobs: [], next_page_token: null };
+  let linkedinJobs = [];
 
-  // Busca simultânea
-  const [remotiveResults, googleResults] = await Promise.allSettled([
-    fetchRemotiveJobs(req.query),
-    fetchGoogleJobs(req.query)
-  ]);
-
-  let allJobs = [];
-  let nextToken = null;
-
-  if (remotiveResults.status === 'fulfilled') {
-    allJobs = [...allJobs, ...remotiveResults.value];
+  if (query.page_token) {
+    googleData = await fetchGoogleJobs(query);
+  } else {
+    [remotiveJobs, googleData, linkedinJobs] = await Promise.all([
+      fetchRemotiveJobs(query),
+      fetchGoogleJobs(query),
+      fetchLinkedInJobs(query)
+    ]);
   }
-  
-  if (googleResults.status === 'fulfilled') {
-    allJobs = [...allJobs, ...googleResults.value.jobs];
-    nextToken = googleResults.value.next_page_token;
-  }
+
+  let allJobs = [...remotiveJobs, ...googleData.jobs, ...linkedinJobs];
+  let nextToken = googleData.next_page_token;
 
   // Pós-processamento de Filtros
+  const { area, location, type, level } = query;
   let filteredJobs = allJobs;
 
   if (area) {
