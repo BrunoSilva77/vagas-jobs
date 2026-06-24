@@ -17,10 +17,14 @@ const normalizeText = (text) => {
 };
 
 const parsePostedAt = (postedAt) => {
-  if (!postedAt) return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // Padrão para 30 dias atrás se não houver data
+  if (!postedAt) return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); 
   
+  if (postedAt.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return new Date(postedAt).toISOString();
+  }
+
   const now = new Date();
-  const match = postedAt.match(/(\d+)\s+(min|hora|dia|mês|mes|ano)/i);
+  const match = postedAt.match(/(\d+)\s+(min|hora|hour|dia|day|semana|week|mês|mes|month|ano|year)/i);
   
   if (match) {
     const amount = parseInt(match[1], 10);
@@ -28,13 +32,15 @@ const parsePostedAt = (postedAt) => {
     
     if (unit.startsWith('min')) {
       now.setMinutes(now.getMinutes() - amount);
-    } else if (unit.startsWith('hora')) {
+    } else if (unit.startsWith('hora') || unit.startsWith('hour')) {
       now.setHours(now.getHours() - amount);
-    } else if (unit.startsWith('dia')) {
+    } else if (unit.startsWith('dia') || unit.startsWith('day')) {
       now.setDate(now.getDate() - amount);
-    } else if (unit.startsWith('mês') || unit.startsWith('mes')) {
+    } else if (unit.startsWith('semana') || unit.startsWith('week')) {
+      now.setDate(now.getDate() - (amount * 7));
+    } else if (unit.startsWith('mês') || unit.startsWith('mes') || unit.startsWith('month')) {
       now.setMonth(now.getMonth() - amount);
-    } else if (unit.startsWith('ano')) {
+    } else if (unit.startsWith('ano') || unit.startsWith('year')) {
       now.setFullYear(now.getFullYear() - amount);
     }
   }
@@ -189,7 +195,7 @@ async function fetchLinkedInJobs(query) {
         const company = $(el).find('h4.base-search-card__subtitle').text().trim();
         const jobLocation = $(el).find('span.job-search-card__location').text().trim();
         const link = $(el).find('a.base-card__full-link').attr('href');
-        const dateText = $(el).find('time').attr('datetime'); // YYYY-MM-DD
+        const dateText = $(el).find('time').text().trim() || $(el).find('time').attr('datetime'); 
         
         if (title && link) {
           let jobType = 'Diversos';
@@ -205,7 +211,7 @@ async function fetchLinkedInJobs(query) {
             type: jobType,
             area: query.area || 'Diversos',
             level: '',
-            date: dateText ? new Date(dateText).toISOString() : new Date().toISOString(),
+            date: dateText ? parsePostedAt(dateText) : new Date().toISOString(),
             description: 'Acesse o LinkedIn para ver os detalhes completos desta vaga recém-postada.',
             url: link,
             platform: 'LinkedIn'
