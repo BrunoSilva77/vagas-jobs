@@ -41,17 +41,21 @@
 }
 
 .search-form {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 1.5rem;
-  align-items: end;
+  align-items: flex-end;
+}
+
+.input-group {
+  flex: 1;
+  min-width: 200px;
 }
 
 .submit-group {
   display: flex;
   height: 100%;
   align-items: flex-end;
-  grid-column: 1 / -1;
 }
 
 .btn-search {

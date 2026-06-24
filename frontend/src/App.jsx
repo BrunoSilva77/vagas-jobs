@@ -13,7 +13,6 @@ function App() {
   const [location, setLocation] = useState('');
   const [type, setType] = useState('Todos');
   const [level, setLevel] = useState('Todos');
-  const [source, setSource] = useState('Todos');
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -26,7 +25,6 @@ function App() {
       if (location) params.append('location', location);
       if (type) params.append('type', type);
       if (level) params.append('level', level);
-      if (source) params.append('source', source);
       
       const response = await fetch(`http://localhost:3001/api/jobs?${params.toString()}`);
       const data = await response.json();
@@ -49,7 +47,6 @@ function App() {
       if (location) params.append('location', location);
       if (type) params.append('type', type);
       if (level) params.append('level', level);
-      if (source) params.append('source', source);
       params.append('page_token', nextPageToken);
       
       const response = await fetch(`http://localhost:3001/api/jobs?${params.toString()}`);
@@ -147,22 +144,6 @@ function App() {
                 <option value="Sênior">Sênior</option>
               </select>
             </div>
-
-            <div className="input-group">
-              <label htmlFor="source" className="input-label">Fonte da Vaga</label>
-              <select 
-                id="source"
-                className="input-field"
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
-              >
-                <option value="Todos">Todas as Fontes</option>
-                <option value="LinkedIn">LinkedIn</option>
-                <option value="InfoJobs">InfoJobs</option>
-                <option value="Gupy">Gupy</option>
-                <option value="Vagas.com">Vagas.com.br</option>
-              </select>
-            </div>
             
             <div className="submit-group">
               <button type="submit" className="btn-primary btn-search" disabled={loading}>
@@ -208,6 +189,7 @@ function App() {
                     <span className={`job-type type-${job.type.replace(/\s+/g, '-').toLowerCase()}`}>
                       {job.type}
                     </span>
+                    {job.platform && <span className="tag platform-tag" style={{background: 'var(--primary-color)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', marginLeft: '8px'}}>{job.platform}</span>}
                   </div>
                   <h3 className="job-title">{job.title}</h3>
                   <div className="job-company-loc">

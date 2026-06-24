@@ -37,7 +37,8 @@ async function fetchRemotiveJobs(query) {
       level: '', 
       date: job.publication_date,
       description: job.description.replace(/<[^>]*>?/gm, '').substring(0, 200) + '...', 
-      url: job.url
+      url: job.url,
+      platform: 'Remotive'
     }));
   } catch (error) {
     console.error("Erro ao buscar no Remotive:", error.message);
@@ -60,18 +61,6 @@ async function fetchGoogleJobs(query) {
     
     if (query.type === 'Home Office') {
       searchTerms += ' Remoto';
-    }
-
-    if (query.source && query.source !== 'Todos') {
-      const sourceMap = {
-        'LinkedIn': 'site:linkedin.com',
-        'InfoJobs': 'site:infojobs.com.br',
-        'Gupy': 'site:gupy.io',
-        'Vagas.com': 'site:vagas.com.br'
-      };
-      if (sourceMap[query.source]) {
-        searchTerms += ` ${sourceMap[query.source]}`;
-      }
     }
 
     if (!searchTerms) return { jobs: [], next_page_token: null };
@@ -100,6 +89,27 @@ async function fetchGoogleJobs(query) {
         type = 'Híbrido';
       }
 
+      const finalUrl = job.related_links ? job.related_links[0]?.link : job.share_link || '#';
+      
+      let platform = 'Web';
+      if (finalUrl !== '#') {
+        const urlLower = finalUrl.toLowerCase();
+        if (urlLower.includes('linkedin')) platform = 'LinkedIn';
+        else if (urlLower.includes('infojobs')) platform = 'InfoJobs';
+        else if (urlLower.includes('gupy')) platform = 'Gupy';
+        else if (urlLower.includes('vagas.com')) platform = 'Vagas.com';
+        else if (urlLower.includes('catho')) platform = 'Catho';
+        else if (urlLower.includes('glassdoor')) platform = 'Glassdoor';
+        else if (urlLower.includes('indeed')) platform = 'Indeed';
+        else {
+          try {
+            const domain = new URL(finalUrl).hostname.replace('www.', '');
+            platform = domain.split('.')[0];
+            platform = platform.charAt(0).toUpperCase() + platform.slice(1);
+          } catch (e) {}
+        }
+      }
+
       return {
         id: `google-${job.job_id || Math.random().toString(36).substr(2, 9)}`,
         title: job.title,
@@ -110,7 +120,8 @@ async function fetchGoogleJobs(query) {
         level: '',
         date: new Date().toISOString(), 
         description: (job.description || '').substring(0, 200) + '...',
-        url: job.related_links ? job.related_links[0]?.link : job.share_link || '#'
+        url: finalUrl,
+        platform: platform
       };
     });
 
@@ -122,16 +133,11 @@ async function fetchGoogleJobs(query) {
 }
 
 app.get('/api/jobs', async (req, res) => {
-  const { area, location, type, level, source, page_token } = req.query;
-
-  // Se o usuário selecionou uma fonte específica (ex: LinkedIn), pulamos a Remotive.
-  const fetchRemotive = (!source || source === 'Todos') 
-    ? fetchRemotiveJobs(req.query) 
-    : Promise.resolve([]);
+  const { area, location, type, level, page_token } = req.query;
 
   // Busca simultânea
   const [remotiveResults, googleResults] = await Promise.allSettled([
-    fetchRemotive,
+    fetchRemotiveJobs(req.query),
     fetchGoogleJobs(req.query)
   ]);
 
@@ -194,7 +200,7 @@ app.get('/api/jobs', async (req, res) => {
      if (type && type !== 'Todos') mockFiltered = mockFiltered.filter(job => normalizeText(job.type).includes(normalizeText(type)));
      if (level && level !== 'Todos') mockFiltered = mockFiltered.filter(job => normalizeText(job.level).includes(normalizeText(level)) || normalizeText(job.title).includes(normalizeText(level)));
      
-     filteredJobs = mockFiltered.sort((a, b) => new Date(b.date) - new Date(a.date));
+     filteredJobs = mockFiltered.sort((a, b) => new Date(b.date) - new Date(a.date)).map(j => ({...j, platform: 'Mock DB'}));
   }
 
   // Novo formato de resposta que inclui paginação
