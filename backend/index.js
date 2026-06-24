@@ -15,6 +15,31 @@ const normalizeText = (text) => {
   return text ? text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() : '';
 };
 
+const parsePostedAt = (postedAt) => {
+  if (!postedAt) return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // Padrão para 30 dias atrás se não houver data
+  
+  const now = new Date();
+  const match = postedAt.match(/(\d+)\s+(min|hora|dia|mês|mes|ano)/i);
+  
+  if (match) {
+    const amount = parseInt(match[1], 10);
+    const unit = match[2].toLowerCase();
+    
+    if (unit.startsWith('min')) {
+      now.setMinutes(now.getMinutes() - amount);
+    } else if (unit.startsWith('hora')) {
+      now.setHours(now.getHours() - amount);
+    } else if (unit.startsWith('dia')) {
+      now.setDate(now.getDate() - amount);
+    } else if (unit.startsWith('mês') || unit.startsWith('mes')) {
+      now.setMonth(now.getMonth() - amount);
+    } else if (unit.startsWith('ano')) {
+      now.setFullYear(now.getFullYear() - amount);
+    }
+  }
+  return now.toISOString();
+};
+
 // Fetch from Remotive (Open API)
 async function fetchRemotiveJobs(query) {
   if (query.page_token) return []; // Remotive doesn't support our Google page token, so skip on load more
@@ -119,7 +144,7 @@ async function fetchGoogleJobs(query) {
         type: type,
         area: query.area || 'Diversos',
         level: '',
-        date: new Date().toISOString(), 
+        date: parsePostedAt(job.detected_extensions?.posted_at), 
         description: (job.description || '').substring(0, 200) + '...',
         url: finalUrl,
         platform: platform
