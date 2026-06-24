@@ -47,9 +47,11 @@ app.get('/api/jobs', (req, res) => {
   // Filtro por Nível de Experiência
   if (level && level !== 'Todos') {
     const levelNorm = normalizeText(level);
-    filteredJobs = filteredJobs.filter(job => 
-      normalizeText(job.level).includes(levelNorm)
-    );
+    filteredJobs = filteredJobs.filter(job => {
+      const inLevelField = job.level && normalizeText(job.level).includes(levelNorm);
+      const inTitleField = job.title && normalizeText(job.title).includes(levelNorm);
+      return inLevelField || inTitleField;
+    });
   }
 
   // Ordenar por data (mais recentes primeiro)
