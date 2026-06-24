@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
 import dotenv from 'dotenv';
-import { mockJobs } from './mockData.js';
 
 dotenv.config();
 
@@ -89,7 +88,8 @@ async function fetchGoogleJobs(query) {
         type = 'Híbrido';
       }
 
-      const finalUrl = job.related_links ? job.related_links[0]?.link : job.share_link || '#';
+      const applyLink = job.apply_options && job.apply_options.length > 0 ? job.apply_options[0].link : null;
+      const finalUrl = applyLink || (job.related_links ? job.related_links[0]?.link : job.share_link) || '#';
       
       let platform = 'Web';
       if (finalUrl !== '#') {
@@ -190,18 +190,6 @@ app.get('/api/jobs', async (req, res) => {
   }
 
   filteredJobs.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-  // Fallback se após os filtros não sobrar nada na PRIMEIRA página, tenta usar o mock para não deixar a tela vazia
-  if (filteredJobs.length === 0 && !page_token) {
-     console.log("Nenhuma vaga real bateu com os filtros. Usando mockData...");
-     let mockFiltered = [...mockJobs];
-     if (area) mockFiltered = mockFiltered.filter(job => normalizeText(job.title).includes(normalizeText(area)) || normalizeText(job.area).includes(normalizeText(area)));
-     if (location) mockFiltered = mockFiltered.filter(job => normalizeText(job.location).includes(normalizeText(location)));
-     if (type && type !== 'Todos') mockFiltered = mockFiltered.filter(job => normalizeText(job.type).includes(normalizeText(type)));
-     if (level && level !== 'Todos') mockFiltered = mockFiltered.filter(job => normalizeText(job.level).includes(normalizeText(level)) || normalizeText(job.title).includes(normalizeText(level)));
-     
-     filteredJobs = mockFiltered.sort((a, b) => new Date(b.date) - new Date(a.date)).map(j => ({...j, platform: 'Mock DB'}));
-  }
 
   // Novo formato de resposta que inclui paginação
   res.json({
